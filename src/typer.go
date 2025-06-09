@@ -21,6 +21,8 @@ const (
 	TyperResize
 )
 
+const idleThreshold = time.Second * 2
+
 type segment struct {
 	Text        string `json:"text"`
 	Attribution string `json:"attribution"`
@@ -46,6 +48,12 @@ type typer struct {
 	incorrectStyle      tcell.Style
 	correctStyle        tcell.Style
 	defaultStyle        tcell.Style
+
+	//ActiveDuration tracks the amount of time spent actively typing during
+	//a test. Pauses longer than idleThreshold are ignored.
+	ActiveDuration time.Duration
+	//ActiveWpm stores the WPM calculated using ActiveDuration.
+	ActiveWpm int
 }
 
 func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hicol2, hicol3, errcol tcell.Color) *typer {
@@ -157,6 +165,8 @@ func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
 
 func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake) {
 	var startTime time.Time
+	var lastTypeTime time.Time
+	t.ActiveDuration = 0
 	text := []rune(s)
 	typed := make([]rune, len(text))
 
@@ -194,6 +204,11 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 		rc = TyperComplete
 		duration = time.Now().Sub(startTime)
+		if t.ActiveDuration > 0 {
+			t.ActiveWpm = int((float64(ncorrect) / 5) / (float64(t.ActiveDuration) / 60e9))
+		} else {
+			t.ActiveWpm = 0
+		}
 	}
 
 	redraw := func() {
@@ -301,11 +316,23 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 		}
 	}
 
+	updateActive := func() {
+		now := time.Now()
+		if !lastTypeTime.IsZero() {
+			d := now.Sub(lastTypeTime)
+			if d <= idleThreshold {
+				t.ActiveDuration += d
+			}
+		}
+		lastTypeTime = now
+	}
+
 	go ticker()
 	defer close(tickerCloser)
 
 	if startImmediately {
 		startTime = time.Now()
+		lastTypeTime = startTime
 	}
 
 	t.Scr.Clear()
@@ -328,6 +355,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 			if startTime.IsZero() {
 				startTime = time.Now()
+				lastTypeTime = startTime
 			}
 
 			switch key := ev.Key(); key {
@@ -352,18 +380,21 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 			case tcell.KeyCtrlW:
 				if !t.DisableBackspace {
+					updateActive()
 					deleteWord()
 				}
 
 			case tcell.KeyBackspace, tcell.KeyBackspace2:
 				if !t.DisableBackspace {
 					if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
+						updateActive()
 						deleteWord()
 					} else {
 						if idx == 0 {
 							break
 						}
 
+						updateActive()
 						idx--
 
 						for idx > 0 && text[idx] == '\n' {
@@ -373,6 +404,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 				}
 			case tcell.KeyRune:
 				if idx < len(text) {
+					updateActive()
 					if t.SkipWord && ev.Rune() == ' ' {
 						if idx > 0 && text[idx-1] == ' ' && text[idx] != ' ' { //Do nothing on word boundaries.
 							break
