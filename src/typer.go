@@ -87,7 +87,7 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 	}
 }
 
-func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake) {
+func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake, history []int) {
 	timeLeft := timeout
 
 	for i, s := range text {
@@ -100,12 +100,14 @@ func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect in
 			startImmediately = false
 		}
 
-		e, c, rc, d, m = t.start(s.Text, timeLeft, startImmediately, s.Attribution)
+		var h []int
+		e, c, rc, d, m, h = t.start(s.Text, timeLeft, startImmediately, s.Attribution)
 
 		nerrs += e
 		ncorrect += c
 		duration += d
 		mistakes = append(mistakes, m...)
+		history = append(history, h...)
 
 		if timeout != -1 {
 			timeLeft -= d
@@ -163,9 +165,11 @@ func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
 	return
 }
 
-func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake) {
+func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake, history []int) {
 	var startTime time.Time
 	var lastTypeTime time.Time
+	var lastSample int
+	history = []int{}
 	t.ActiveDuration = 0
 	text := []rune(s)
 	typed := make([]rune, len(text))
@@ -208,6 +212,33 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			t.ActiveWpm = int((float64(ncorrect) / 5) / (float64(t.ActiveDuration) / 60e9))
 		} else {
 			t.ActiveWpm = 0
+		}
+	}
+
+	calcCurrent := func() (errs, correct int) {
+		for i := 0; i < idx; i++ {
+			if text[i] != '\n' {
+				if text[i] != typed[i] {
+					errs++
+				} else {
+					correct++
+				}
+			}
+		}
+		return
+	}
+
+	sample := func() {
+		if startTime.IsZero() {
+			return
+		}
+		sec := int(time.Since(startTime).Seconds())
+		for lastSample < sec {
+			lastSample++
+			_, c := calcCurrent()
+			d := time.Duration(lastSample) * time.Second
+			w := int((float64(c) / 5) / (float64(d) / 60e9))
+			history = append(history, w)
 		}
 	}
 
@@ -338,12 +369,14 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	t.Scr.Clear()
 	for {
 		redraw()
+		sample()
 
 		ev := t.Scr.PollEvent()
 
 		switch ev := ev.(type) {
 		case *tcell.EventResize:
 			rc = TyperResize
+			sample()
 			return
 		case *tcell.EventKey:
 			if runtime.GOOS != "windows" && ev.Key() == tcell.KeyBackspace { //Control+backspace on unix terms
@@ -361,27 +394,30 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 			switch key := ev.Key(); key {
 			case tcell.KeyCtrlC:
 				rc = TyperSigInt
-
+				sample()
 				return
 			case tcell.KeyEscape:
 				rc = TyperEscape
-
+				sample()
 				return
 			case tcell.KeyCtrlL:
 				t.Scr.Sync()
 
 			case tcell.KeyRight:
 				rc = TyperNext
+				sample()
 				return
 
 			case tcell.KeyLeft:
 				rc = TyperPrevious
+				sample()
 				return
 
 			case tcell.KeyCtrlW:
 				if !t.DisableBackspace {
 					updateActive()
 					deleteWord()
+					sample()
 				}
 
 			case tcell.KeyBackspace, tcell.KeyBackspace2:
@@ -389,6 +425,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 					if ev.Modifiers() == tcell.ModAlt || ev.Modifiers() == tcell.ModCtrl {
 						updateActive()
 						deleteWord()
+						sample()
 					} else {
 						if idx == 0 {
 							break
@@ -396,6 +433,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 						updateActive()
 						idx--
+						sample()
 
 						for idx > 0 && text[idx] == '\n' {
 							idx--
@@ -428,20 +466,24 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 						typed[idx] = text[idx]
 						idx++
 					}
+					sample()
 				}
 
 				if idx == len(text) {
 					calcStats()
+					sample()
 					return
 				}
 			}
 		default: //tick
 			if timeLimit != -1 && !startTime.IsZero() && timeLimit <= time.Now().Sub(startTime) {
 				calcStats()
+				sample()
 				return
 			}
 
 			redraw()
+			sample()
 		}
 	}
 }

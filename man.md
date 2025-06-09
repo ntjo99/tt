@@ -108,6 +108,10 @@ usage: tt \[OPTION\]... \[FILE\]
 
 : Don't show a report at the end of a test.
 
+-nograph
+
+: Disable the WPM graph in the report.
+
 -csv
 
 : Print CSV formatted results.
