@@ -119,7 +119,7 @@ usage: tt \[OPTION\]... \[FILE\]
 	Tests have the form:
 
 	```
-        test,[wpm],[activewpm],[cpm],[accuracy],[timestamp].
+       test,[wpm],[cpm],[accuracy],[timestamp].
 	```
 
 	Mistakes have the form:

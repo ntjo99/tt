@@ -22,7 +22,6 @@ var jsonMode bool
 
 type result struct {
 	Wpm       int       `json:"wpm"`
-	ActiveWpm int       `json:"activewpm"`
 	Cpm       int       `json:"cpm"`
 	Accuracy  float64   `json:"accuracy"`
 	Timestamp int64     `json:"timestamp"`
@@ -77,7 +76,7 @@ func exit(rc int) {
 
 	if csvMode {
 		for _, r := range results {
-			fmt.Printf("test,%d,%d,%d,%.2f,%d\n", r.Wpm, r.ActiveWpm, r.Cpm, r.Accuracy, r.Timestamp)
+			fmt.Printf("test,%d,%d,%.2f,%d\n", r.Wpm, r.Cpm, r.Accuracy, r.Timestamp)
 			for _, m := range r.Mistakes {
 				fmt.Printf("mistake,%s,%s\n", m.Word, m.Typed)
 			}
@@ -115,7 +114,7 @@ func drawWpmGraph(history []int) string {
 	return b.String()
 }
 
-func showReport(scr tcell.Screen, cpm, wpm, activeWpm int, accuracy float64, attribution string, mistakes []mistake, history []int, showGraph bool) {
+func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution string, mistakes []mistake, history []int, showGraph bool) {
 	mistakeStr := ""
 	if attribution != "" {
 		attribution = "\n\nAttribution: " + attribution
@@ -139,7 +138,7 @@ func showReport(scr tcell.Screen, cpm, wpm, activeWpm int, accuracy float64, att
 		}
 	}
 
-	report := fmt.Sprintf("WPM:         %d\nActive WPM:  %d\nCPM:         %d\nAccuracy:    %.2f%%%s%s%s", wpm, activeWpm, cpm, accuracy, mistakeStr, attribution, graph)
+	report := fmt.Sprintf("WPM:         %d\nCPM:         %d\nAccuracy:    %.2f%%%s%s%s", wpm, cpm, accuracy, mistakeStr, attribution, graph)
 
 	scr.Clear()
 	drawStringAtCenter(scr, report, tcell.StyleDefault)
@@ -457,21 +456,14 @@ func main() {
 		case TyperComplete:
 			cpm := int(float64(ncorrect) / (float64(t) / 60e9))
 			wpm := cpm / 5
-			activeCpm := 0
-			activeWpm := 0
-			if typer.ActiveDuration > 0 {
-				activeCpm = int(float64(ncorrect) / (float64(typer.ActiveDuration) / 60e9))
-				activeWpm = activeCpm / 5
-			}
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
-
-			results = append(results, result{wpm, activeWpm, cpm, accuracy, time.Now().Unix(), mistakes})
+			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix(), mistakes})
 			if !noReport {
 				attribution := ""
 				if len(tests[idx]) == 1 {
 					attribution = tests[idx][0].Attribution
 				}
-				showReport(scr, cpm, wpm, activeWpm, accuracy, attribution, mistakes, history, !noGraph)
+				showReport(scr, cpm, wpm, accuracy, attribution, mistakes, history, !noGraph)
 			}
 			if oneShotMode {
 				exit(0)
