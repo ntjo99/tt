@@ -9,8 +9,8 @@ A terminal based typing test.
 ## Linux
 
 ```
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
-sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
+sudo curl -L https://github.com/ntjo99/tt/releases/download/v0.4.2/tt-linux -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/ntjo99/tt/releases/download/v0.4.2/tt.1.gz
 ```
 
 ## OSX
@@ -18,8 +18,8 @@ sudo curl -o /usr/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/release
 ```
 mkdir -p /usr/local/bin /usr/local/share/man/man1 # Usually created by brew
 
-sudo curl -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
-sudo curl -o /usr/local/share/man/man1/tt.1.gz -L https://github.com/lemnos/tt/releases/download/v0.4.2/tt.1.gz
+sudo curl -L https://github.com/ntjo99/tt/releases/download/v0.4.2/tt-osx -o /usr/local/bin/tt && sudo chmod +x /usr/local/bin/tt
+sudo curl -o /usr/local/share/man/man1/tt.1.gz -L https://github.com/ntjo99/tt/releases/download/v0.4.2/tt.1.gz
 ```
 
 ## Uninstall
@@ -35,7 +35,7 @@ sudo rm /usr/local/bin/tt /usr/share/man/man1/tt.1.gz
 sudo apt install golang
 
 # clone and make
-git clone https://github.com/lemnos/tt
+git clone https://github.com/ntjo99/tt
 cd tt
 make && sudo make install
 ```
