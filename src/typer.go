@@ -79,20 +79,34 @@ func NewTyper(scr tcell.Screen, emboldenTypedText bool, fgcol, bgcol, hicol, hic
 	}
 }
 
-func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake) {
+func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect int, duration time.Duration, rc int, mistakes []mistake, log []wpmEntry, start time.Time, end time.Time) {
 	timeLeft := timeout
+	offset := 0.0
 
 	for i, s := range text {
 		startImmediately := true
 		var d time.Duration
 		var e, c int
 		var m []mistake
+		var l []wpmEntry
+		var st time.Time
+		var ed time.Time
 
 		if i == 0 {
 			startImmediately = false
 		}
 
-		e, c, rc, d, m = t.start(s.Text, timeLeft, startImmediately, s.Attribution)
+		e, c, rc, d, m, l, st, ed = t.start(s.Text, timeLeft, startImmediately, s.Attribution)
+		for i := range l {
+			l[i].Time += offset
+		}
+		log = append(log, l...)
+		if start.IsZero() {
+			start = st
+		}
+		if !ed.IsZero() {
+			end = ed
+		}
 
 		nerrs += e
 		ncorrect += c
@@ -109,6 +123,7 @@ func (t *typer) Start(text []segment, timeout time.Duration) (nerrs, ncorrect in
 		if rc != TyperComplete {
 			return
 		}
+		offset += d.Seconds()
 	}
 
 	return
@@ -155,7 +170,7 @@ func extractMistypedWords(text []rune, typed []rune) (mistakes []mistake) {
 	return
 }
 
-func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake) {
+func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, attribution string) (nerrs int, ncorrect int, rc int, duration time.Duration, mistakes []mistake, log []wpmEntry, started time.Time, ended time.Time) {
 	var startTime time.Time
 	text := []rune(s)
 	typed := make([]rune, len(text))
@@ -175,6 +190,24 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 	t.Scr.SetStyle(t.defaultStyle)
 	idx := 0
+	log = []wpmEntry{}
+
+	calcWpm := func() int {
+		if startTime.IsZero() {
+			return 0
+		}
+		c := 0
+		for i := 0; i < idx; i++ {
+			if text[i] != '\n' && text[i] == typed[i] {
+				c++
+			}
+		}
+		d := time.Since(startTime)
+		if d <= 0 {
+			return 0
+		}
+		return int((float64(c) / 5) / (float64(d) / 60e9))
+	}
 
 	calcStats := func() {
 		nerrs = 0
@@ -306,6 +339,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 	if startImmediately {
 		startTime = time.Now()
+		started = startTime
 	}
 
 	t.Scr.Clear()
@@ -328,26 +362,33 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 			if startTime.IsZero() {
 				startTime = time.Now()
+				started = startTime
 			}
 
 			switch key := ev.Key(); key {
 			case tcell.KeyCtrlC:
 				rc = TyperSigInt
-
+				ended = time.Now()
+				log = append(log, wpmEntry{Time: time.Since(startTime).Seconds(), Wpm: calcWpm()})
 				return
 			case tcell.KeyEscape:
 				rc = TyperEscape
-
+				ended = time.Now()
+				log = append(log, wpmEntry{Time: time.Since(startTime).Seconds(), Wpm: calcWpm()})
 				return
 			case tcell.KeyCtrlL:
 				t.Scr.Sync()
 
 			case tcell.KeyRight:
 				rc = TyperNext
+				ended = time.Now()
+				log = append(log, wpmEntry{Time: time.Since(startTime).Seconds(), Wpm: calcWpm()})
 				return
 
 			case tcell.KeyLeft:
 				rc = TyperPrevious
+				ended = time.Now()
+				log = append(log, wpmEntry{Time: time.Since(startTime).Seconds(), Wpm: calcWpm()})
 				return
 
 			case tcell.KeyCtrlW:
@@ -400,16 +441,24 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 				if idx == len(text) {
 					calcStats()
+					ended = time.Now()
+					log = append(log, wpmEntry{Time: time.Since(startTime).Seconds(), Wpm: calcWpm()})
 					return
 				}
 			}
 		default: //tick
 			if timeLimit != -1 && !startTime.IsZero() && timeLimit <= time.Now().Sub(startTime) {
 				calcStats()
+				ended = time.Now()
+				log = append(log, wpmEntry{Time: time.Since(startTime).Seconds(), Wpm: calcWpm()})
 				return
 			}
 
 			redraw()
+		}
+
+		if !startTime.IsZero() {
+			log = append(log, wpmEntry{Time: time.Since(startTime).Seconds(), Wpm: calcWpm()})
 		}
 	}
 }
