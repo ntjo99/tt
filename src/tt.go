@@ -106,6 +106,7 @@ func drawWpmGraph(history []int) string {
 	var b strings.Builder
 	for row := h; row >= 0; row-- {
 		b.WriteString(fmt.Sprintf("%3d|", row*10))
+
 		for _, v := range history {
 			if v >= row*10 {
 				b.WriteRune('#')
@@ -120,6 +121,7 @@ func drawWpmGraph(history []int) string {
 }
 
 func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution string, mistakes []mistake, history []int, showGraph bool) {
+
 	mistakeStr := ""
 	if attribution != "" {
 		attribution = "\n\nAttribution: " + attribution
@@ -144,6 +146,7 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution st
 	}
 
 	report := fmt.Sprintf("WPM:         %d\nCPM:         %d\nAccuracy:    %.2f%%%s%s%s", wpm, cpm, accuracy, mistakeStr, attribution, graph)
+
 
 	scr.Clear()
 	drawStringAtCenter(scr, report, tcell.StyleDefault)
@@ -469,6 +472,7 @@ func main() {
 					attribution = tests[idx][0].Attribution
 				}
 				showReport(scr, cpm, wpm, accuracy, attribution, mistakes, history, !noGraph)
+
 			}
 			if oneShotMode {
 				exit(0)

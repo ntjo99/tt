@@ -161,6 +161,7 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 	var startTime time.Time
 	var lastSample int
 	history = []int{}
+
 	text := []rune(s)
 	typed := make([]rune, len(text))
 
@@ -198,6 +199,33 @@ func (t *typer) start(s string, timeLimit time.Duration, startImmediately bool, 
 
 		rc = TyperComplete
 		duration = time.Now().Sub(startTime)
+	}
+
+	calcCurrent := func() (errs, correct int) {
+		for i := 0; i < idx; i++ {
+			if text[i] != '\n' {
+				if text[i] != typed[i] {
+					errs++
+				} else {
+					correct++
+				}
+			}
+		}
+		return
+	}
+
+	sample := func() {
+		if startTime.IsZero() {
+			return
+		}
+		sec := int(time.Since(startTime).Seconds())
+		for lastSample < sec {
+			lastSample++
+			_, c := calcCurrent()
+			d := time.Duration(lastSample) * time.Second
+			w := int((float64(c) / 5) / (float64(d) / 60e9))
+			history = append(history, w)
+		}
 	}
 
 	calcCurrent := func() (errs, correct int) {
