@@ -20,12 +20,20 @@ var scr tcell.Screen
 var csvMode bool
 var jsonMode bool
 
+type wpmEntry struct {
+	Time float64 `json:"time"`
+	Wpm  int     `json:"wpm"`
+}
+
 type result struct {
-	Wpm       int       `json:"wpm"`
-	Cpm       int       `json:"cpm"`
-	Accuracy  float64   `json:"accuracy"`
-	Timestamp int64     `json:"timestamp"`
-	Mistakes  []mistake `json:"mistakes"`
+	Wpm       int        `json:"wpm"`
+	Cpm       int        `json:"cpm"`
+	Accuracy  float64    `json:"accuracy"`
+	Timestamp int64      `json:"timestamp"`
+	Mistakes  []mistake  `json:"mistakes"`
+	Start     int64      `json:"start"`
+	End       int64      `json:"end"`
+	WpmSeries []wpmEntry `json:"wpm_series"`
 }
 
 func die(format string, args ...interface{}) {
@@ -86,7 +94,7 @@ func exit(rc int) {
 	os.Exit(rc)
 }
 
-func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution string, mistakes []mistake) {
+func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution string, mistakes []mistake, series []wpmEntry) {
 	mistakeStr := ""
 	if attribution != "" {
 		attribution = "\n\nAttribution: " + attribution
@@ -107,6 +115,66 @@ func showReport(scr tcell.Screen, cpm, wpm int, accuracy float64, attribution st
 	scr.Clear()
 	drawStringAtCenter(scr, report, tcell.StyleDefault)
 	scr.HideCursor()
+	scr.Show()
+
+	for {
+		if key, ok := scr.PollEvent().(*tcell.EventKey); ok && key.Key() == tcell.KeyEscape {
+			break
+		} else if ok && key.Key() == tcell.KeyCtrlC {
+			exit(1)
+		}
+	}
+
+	showGraph(scr, series)
+}
+
+func showGraph(scr tcell.Screen, series []wpmEntry) {
+	if len(series) == 0 {
+		return
+	}
+
+	scr.Clear()
+	sw, sh := scr.Size()
+	width := sw - 10
+	height := sh - 5
+	if width <= 0 {
+		width = sw - 2
+	}
+	if height <= 0 {
+		height = sh - 2
+	}
+
+	maxWpm := 0
+	for _, p := range series {
+		if p.Wpm > maxWpm {
+			maxWpm = p.Wpm
+		}
+	}
+	if maxWpm == 0 {
+		maxWpm = 1
+	}
+
+	duration := series[len(series)-1].Time
+	if duration <= 0 {
+		duration = 1
+	}
+
+	baseY := sh - 3
+
+	for x := 0; x < width; x++ {
+		scr.SetContent(5+x, baseY, '-', nil, tcell.StyleDefault)
+	}
+	for y := 0; y < height; y++ {
+		scr.SetContent(4, baseY-y, '|', nil, tcell.StyleDefault)
+	}
+	scr.SetContent(4, baseY, '+', nil, tcell.StyleDefault)
+
+	for _, p := range series {
+		px := int((p.Time / duration) * float64(width-1))
+		py := int((float64(p.Wpm) / float64(maxWpm)) * float64(height-1))
+		scr.SetContent(5+px, baseY-1-py, '*', nil, tcell.StyleDefault)
+	}
+
 	scr.Show()
 
 	for {
@@ -383,7 +451,7 @@ func main() {
 	typer.ShowWpm = showWpm
 
 	if timeout != -1 {
-		timeout *= 1E9
+		timeout *= 1e9
 	}
 
 	var tests [][]segment
@@ -404,7 +472,7 @@ func main() {
 			}
 		}
 
-		nerrs, ncorrect, t, rc, mistakes := typer.Start(tests[idx], time.Duration(timeout))
+		nerrs, ncorrect, t, rc, mistakes, log, st, ed := typer.Start(tests[idx], time.Duration(timeout))
 		saveMistakes(mistakes)
 
 		switch rc {
@@ -415,17 +483,17 @@ func main() {
 				idx--
 			}
 		case TyperComplete:
-			cpm := int(float64(ncorrect) / (float64(t) / 60E9))
+			cpm := int(float64(ncorrect) / (float64(t) / 60e9))
 			wpm := cpm / 5
 			accuracy := float64(ncorrect) / float64(nerrs+ncorrect) * 100
 
-			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix(), mistakes})
+			results = append(results, result{wpm, cpm, accuracy, time.Now().Unix(), mistakes, st.Unix(), ed.Unix(), log})
 			if !noReport {
 				attribution := ""
 				if len(tests[idx]) == 1 {
 					attribution = tests[idx][0].Attribution
 				}
-				showReport(scr, cpm, wpm, accuracy, attribution, mistakes)
+				showReport(scr, cpm, wpm, accuracy, attribution, mistakes, log)
 			}
 			if oneShotMode {
 				exit(0)
