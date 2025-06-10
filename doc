@@ -29,8 +29,9 @@ Test Parameters
 Scripting
     -oneshot            Automatically exit after a single run.
     -noreport           Don't show a report at the end of a test.
+    -nograph            Disable the WPM graph in the report.
     -csv                Print the test results to stdout in the form:
-                        [wpm],[activewpm],[cpm],[accuracy],[timestamp].
+                        [wpm],[cpm],[accuracy],[timestamp].
     -raw                Don't reflow STDIN text or show one paragraph at a time. 
                         Note that line breaks are determined exclusively by the 
                         input.
